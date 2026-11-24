@@ -11,6 +11,7 @@
         EXPERTS_LIST: "retro16_experts_list_v2",
         THREADS: "retro16_chat_threads_v1",
         SAVES: "retro16_saved_chats_v1",
+        MODEL_CTX: "retro16_model_ctx_v1",
         PREFS: "retro16_ui_prefs_v1"
     };
 
@@ -42,8 +43,10 @@
             apiKey: "",
             model: window.API_PRESETS.openrouter.defaultModel,
             stream: true,
-            temperature: 0.7
+            temperature: 0.7,
+            contextOverride: ""
         },
+        modelContextMap: {}, // { [modelId]: number } populated by /models fetch
         threads: {}, // { [threadId]: [ { type: 'user'|'bot'|'system', text, expertId?, expertName?, expertTitle?, time } ] }
         savedChats: [], // [ { id, name, threadId, expertId, isBranch, createdAt, messages } ]
         loadedSheets: {},
@@ -59,8 +62,10 @@
         viewportUnitCode: document.getElementById("viewport-unit-code"),
         telemetryName: document.getElementById("telemetry-name"),
         telemetryClassBadge: document.getElementById("telemetry-class-badge"),
-        telemetrySignalText: document.getElementById("telemetry-signal-text"),
-        hpBarFill: document.getElementById("hp-bar-fill"),
+        contextMeterBlock: document.getElementById("context-meter-block"),
+        contextUsageText: document.getElementById("context-usage-text"),
+        contextBarFill: document.getElementById("context-bar-fill"),
+        clearContextBtn: document.getElementById("clear-context-btn"),
         toggleChromaKeyBtn: document.getElementById("toggle-chromakey-btn"),
         customSpriteInput: document.getElementById("custom-sprite-input"),
         resetSpriteBtn: document.getElementById("reset-sprite-btn"),
@@ -74,6 +79,7 @@
         fetchModelsBtn: document.getElementById("fetch-models-btn"),
         toggleStreamBtn: document.getElementById("toggle-stream-btn"),
         apiTempInput: document.getElementById("api-temp-input"),
+        apiCtxInput: document.getElementById("api-ctx-input"),
         apiStatusBadge: document.getElementById("api-status-badge"),
         apiFeedback: document.getElementById("api-feedback"),
 
@@ -238,6 +244,9 @@
 
         const savedChats = safeReadJSON(STORAGE_KEYS.SAVES, []);
         state.savedChats = Array.isArray(savedChats) ? savedChats : [];
+
+        const savedModelCtx = safeReadJSON(STORAGE_KEYS.MODEL_CTX, {});
+        state.modelContextMap = savedModelCtx && typeof savedModelCtx === "object" ? savedModelCtx : {};
     }
 
     function saveApiConfig() {
@@ -665,15 +674,117 @@
         });
     }
 
+    // =====================================================================
+    // 8B. FUNCTIONAL CONTEXT METER (AUTO-MATCHED TO ACTIVE MODEL)
+    // =====================================================================
+    const MODEL_CONTEXT_PATTERNS = [
+        [/gemini[-_\s]?(2\.5|2\.0|1\.5)/i, 1048576],
+        [/gpt-4\.1/i, 1047576],
+        [/claude[-_\s]?(3|4|sonnet|opus|haiku)/i, 200000],
+        [/(^|\/)(o1|o3|o4-mini)/i, 200000],
+        [/gpt-4o|gpt-4-turbo|chatgpt-4o/i, 128000],
+        [/gpt-4(?!o|-turbo|\.1)/i, 8192],
+        [/gpt-3\.5/i, 16385],
+        [/llama[-_\s]?3\.[1-9]|llama[-_\s]?4/i, 131072],
+        [/llama[-_\s]?3(?![._\d])/i, 8192],
+        [/deepseek/i, 131072],
+        [/qwen[-_\s]?(3|2\.5)/i, 131072],
+        [/qwen/i, 32768],
+        [/mistral-large|mistral-small|ministral|pixtral|codestral/i, 128000],
+        [/mixtral-8x22b/i, 65536],
+        [/mixtral|mistral/i, 32768],
+        [/gemma[-_\s]?3/i, 131072],
+        [/gemma[-_\s]?2/i, 8192],
+        [/grok[-_\s]?(2|3|4)/i, 131072],
+        [/command-r/i, 128000],
+        [/phi-4|phi-3/i, 16384]
+    ];
+
+    function getModelContextInfo() {
+        const overrideNum = parseInt(state.api.contextOverride, 10);
+        if (Number.isFinite(overrideNum) && overrideNum >= 512) {
+            return { limit: overrideNum, source: "Custom override" };
+        }
+
+        const modelId = (state.api.model || "").trim();
+        if (modelId && state.modelContextMap[modelId] >= 512) {
+            return { limit: state.modelContextMap[modelId], source: `Fetched from API (${modelId})` };
+        }
+
+        if (modelId) {
+            for (const [pattern, limit] of MODEL_CONTEXT_PATTERNS) {
+                if (pattern.test(modelId)) {
+                    return { limit, source: `Model preset (${modelId})` };
+                }
+            }
+        }
+
+        const isLocal = state.api.preset === "lmstudio" || state.api.preset === "ollama";
+        return {
+            limit: isLocal ? 8192 : 32768,
+            source: isLocal ? "Local default (set CTX LIMIT or FETCH)" : "Default estimate (set CTX LIMIT or FETCH)"
+        };
+    }
+
+    function estimateTextTokens(str) {
+        if (!str) return 0;
+        return Math.ceil(str.length / 4);
+    }
+
+    function estimateCurrentContextTokens() {
+        const active = getActiveExpert();
+        const messages = buildMessagesPayload(state.activeThreadId, active, null);
+        let total = 3; // Assistant reply priming overhead
+        for (const m of messages) {
+            total += 4 + estimateTextTokens(m.content);
+        }
+        const draft = dom.commandInput ? dom.commandInput.value.trim() : "";
+        if (draft) {
+            total += 4 + estimateTextTokens(draft);
+        }
+        return total;
+    }
+
+    function formatTokenCount(n) {
+        if (n >= 1000000) {
+            const m = n / 1000000;
+            return (m >= 10 ? Math.round(m) : m.toFixed(1).replace(/\.0$/, "")) + "M";
+        }
+        if (n >= 1000) {
+            const k = n / 1000;
+            return (k >= 10 ? Math.round(k) : k.toFixed(1).replace(/\.0$/, "")) + "K";
+        }
+        return String(n);
+    }
+
+    function updateContextMeter() {
+        const used = estimateCurrentContextTokens();
+        const { limit, source } = getModelContextInfo();
+        const ratio = limit > 0 ? used / limit : 0;
+        const pct = Math.min(100, Math.max(0, ratio * 100));
+
+        dom.contextUsageText.textContent = `${formatTokenCount(used)} / ${formatTokenCount(limit)}`;
+        dom.contextBarFill.style.width = `${pct.toFixed(1)}%`;
+
+        dom.contextBarFill.classList.remove("ctx-warn", "ctx-danger");
+        if (ratio >= 0.75) {
+            dom.contextBarFill.classList.add("ctx-danger");
+        } else if (ratio >= 0.55) {
+            dom.contextBarFill.classList.add("ctx-warn");
+        }
+
+        dom.contextMeterBlock.title =
+            `Context: ~${used.toLocaleString()} / ${limit.toLocaleString()} tokens (${pct.toFixed(1)}%)\nSource: ${source}`;
+    }
+
     function syncExpertUI() {
         const exp = getActiveExpert();
 
         dom.viewportUnitCode.textContent = exp.unitCode;
         dom.telemetryName.textContent = exp.name;
         dom.telemetryClassBadge.textContent = exp.title;
-        dom.telemetrySignalText.textContent = `${exp.signal}/100`;
-        dom.hpBarFill.style.width = `${exp.signal}%`;
         dom.resetSpriteBtn.classList.toggle("hidden", !state.customSpriteImages[exp.id]);
+        updateContextMeter();
 
         // Highlight active slot & sync names/titles in roster
         dom.rosterGrid.querySelectorAll(".roster-slot").forEach((el) => {
@@ -1197,6 +1308,13 @@
     }
 
     function createMessageElement(msg, msgIndex = null) {
+        if (msg.type === "context_reset") {
+            const el = document.createElement("div");
+            el.className = "ctx-reset-banner";
+            el.innerHTML = `<span>▶ ${escapeHTML(msg.text)}</span><span class="msg-time">[${escapeHTML(msg.time || "")}]</span>`;
+            return el;
+        }
+
         if (msg.type === "system") {
             const el = document.createElement("div");
             el.className = "sys-banner";
@@ -1299,6 +1417,7 @@
         thread.forEach((msg, idx) => {
             dom.chatFeed.appendChild(createMessageElement(msg, idx));
         });
+        updateContextMeter();
         scrollToBottom();
     }
 
@@ -1347,7 +1466,17 @@
 
         const messages = [{ role: "system", content: systemContent }];
 
-        thread.forEach((m) => {
+        // Only include messages after the most recent context reset marker
+        let startIdx = 0;
+        for (let i = thread.length - 1; i >= 0; i--) {
+            if (thread[i].type === "context_reset") {
+                startIdx = i + 1;
+                break;
+            }
+        }
+
+        for (let i = startIdx; i < thread.length; i++) {
+            const m = thread[i];
             if (m.type === "user") {
                 messages.push({ role: "user", content: m.text });
             } else if (m.type === "bot") {
@@ -1358,7 +1487,7 @@
                         : "";
                 messages.push({ role: "assistant", content: prefix + m.text });
             }
-        });
+        }
 
         if (extraUserPrompt) {
             messages.push({ role: "user", content: extraUserPrompt });
@@ -1570,7 +1699,24 @@
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             const list = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
-            const ids = list.map((m) => (typeof m === "string" ? m : m.id)).filter(Boolean).sort();
+            const ids = [];
+
+            list.forEach((m) => {
+                const id = typeof m === "string" ? m : m?.id;
+                if (!id) return;
+                ids.push(id);
+                const ctxLen =
+                    m?.context_length ||
+                    m?.max_context_length ||
+                    m?.max_model_len ||
+                    m?.model_spec?.availableContextTokens ||
+                    m?.top_provider?.context_length;
+                if (Number.isFinite(Number(ctxLen)) && Number(ctxLen) >= 512) {
+                    state.modelContextMap[id] = Number(ctxLen);
+                }
+            });
+            ids.sort();
+            safeWriteJSON(STORAGE_KEYS.MODEL_CTX, state.modelContextMap);
 
             dom.apiModelList.innerHTML = "";
             ids.forEach((id) => {
@@ -1585,6 +1731,7 @@
                 saveApiConfig();
             }
 
+            updateContextMeter();
             setApiStatus("ONLINE", "ok");
             showApiFeedback(`LOADED ${ids.length} MODELS`);
         } catch (err) {
@@ -1604,6 +1751,7 @@
         dom.apiKeyInput.value = state.api.apiKey || "";
         dom.apiModelInput.value = state.api.model || "";
         dom.apiTempInput.value = state.api.temperature ?? 0.7;
+        dom.apiCtxInput.value = state.api.contextOverride || "";
         dom.toggleStreamBtn.textContent = state.api.stream ? "STREAM: ON" : "STREAM: OFF";
         dom.toggleStreamBtn.classList.toggle("text-highlight", state.api.stream);
     }
@@ -1646,6 +1794,8 @@
                 dom.commandForm.requestSubmit();
             }
         });
+
+        dom.commandInput.addEventListener("input", updateContextMeter);
 
         dom.stopBtn.addEventListener("click", () => {
             if (state.abortController) {
@@ -1706,6 +1856,25 @@
         // Add / Delete Expert
         dom.addExpertBtn.addEventListener("click", addCustomExpert);
         dom.deleteExpertBtn.addEventListener("click", deleteActiveExpert);
+
+        // Clear Context (keeps chat log visible, resets AI memory from this point)
+        dom.clearContextBtn.addEventListener("click", () => {
+            if (state.isGenerating) return;
+            const thread = getThread(state.activeThreadId);
+            // Avoid stacking duplicate reset banners back-to-back
+            if (thread.length > 0 && thread[thread.length - 1].type === "context_reset") {
+                sfx.click();
+                updateContextMeter();
+                return;
+            }
+            sfx.switchUnit();
+            pushThreadMessage(state.activeThreadId, {
+                type: "context_reset",
+                text: "CONTEXT CLEARED // FRESH MEMORY STARTS HERE",
+                time: getFormattedTime()
+            });
+            renderActiveThread();
+        });
 
         // SFX Toggle
         dom.toggleSfxBtn.addEventListener("click", () => {
@@ -1802,6 +1971,7 @@
             }
             syncApiInputsFromState();
             saveApiConfig();
+            updateContextMeter();
             sfx.click();
             showApiFeedback(`PRESET: ${preset ? preset.label.toUpperCase() : "CUSTOM"}`);
         });
@@ -1826,6 +1996,14 @@
         dom.apiModelInput.addEventListener("input", () => {
             state.api.model = dom.apiModelInput.value.trim();
             saveApiConfig();
+            updateContextMeter();
+        });
+
+        dom.apiCtxInput.addEventListener("input", () => {
+            const raw = dom.apiCtxInput.value.trim();
+            state.api.contextOverride = raw;
+            saveApiConfig();
+            updateContextMeter();
         });
 
         dom.apiTempInput.addEventListener("change", () => {
@@ -1887,37 +2065,30 @@
     }
 
     // =====================================================================
-    // 12. LOCAL LAUNCHER HEARTBEAT (AUTO-CLOSE SERVER WHEN BROWSER CLOSES)
+    // 12. LOCAL LAUNCHER KEEPALIVE (SSE — IMMUNE TO BACKGROUND TAB THROTTLING)
     // =====================================================================
     function startLauncherHeartbeat() {
         const host = window.location.hostname;
         if (host !== "127.0.0.1" && host !== "localhost") return;
 
-        let launcherDetected = true;
-
-        const sendBeat = () => {
-            if (!launcherDetected) return;
-            fetch("/__heartbeat", { method: "POST", cache: "no-store" })
-                .then((res) => {
-                    if (res.status === 404 || res.status === 405 || res.status === 501) {
-                        launcherDetected = false;
-                    }
-                })
-                .catch(() => {
-                    // Server already stopped
-                });
-        };
-
-        sendBeat();
-        const beatTimer = setInterval(sendBeat, 3000);
+        let es = null;
+        if (typeof window.EventSource === "function") {
+            es = new EventSource("/__events");
+            es.onerror = () => {
+                // If hosted by a plain static server without /__events, stop reconnecting
+                if (es && es.readyState === EventSource.CLOSED) {
+                    es = null;
+                }
+            };
+        }
 
         const notifyShutdown = () => {
-            if (!launcherDetected) return;
-            clearInterval(beatTimer);
+            if (es) {
+                es.close();
+                es = null;
+            }
             if (navigator.sendBeacon) {
                 navigator.sendBeacon("/__shutdown");
-            } else {
-                fetch("/__shutdown", { method: "POST", keepalive: true }).catch(() => {});
             }
         };
 

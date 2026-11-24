@@ -3,18 +3,16 @@
 Local launcher for 16-Bit Retro Expert Terminal.
 - Serves static files from this directory on localhost.
 - Opens the default web browser automatically.
-- Shuts down cleanly when EITHER:
-    1) The terminal window is closed (SIGINT/SIGTERM/window close), OR
-    2) The browser tab/window is closed (via pagehide beacon or missed heartbeat).
-  Page refreshes (F5) are handled gracefully via a short reconnect grace period.
+- Uses a persistent SSE (/ __events) connection so backgrounded browser tabs
+  never trigger false timeouts, while closing the browser tab (or closing the
+  terminal window) cleanly shuts down the server.
+- Page refreshes (F5) are handled gracefully via a short reconnect grace period.
 """
 
 import http.server
-import os
 import signal
 import socket
 import socketserver
-import sys
 import threading
 import time
 import webbrowser
@@ -24,38 +22,50 @@ BASE_DIR = Path(__file__).resolve().parent
 START_PORT = 8765
 END_PORT = 8799
 SHUTDOWN_GRACE_SECONDS = 2.5
-HEARTBEAT_TIMEOUT_SECONDS = 12.0
 
 
 class LifecycleState:
     def __init__(self):
         self.lock = threading.Lock()
-        self.client_connected = False
-        self.last_seen = time.monotonic()
+        self.active_clients = 0
+        self.ever_connected = False
         self.shutdown_deadline = None
 
-    def mark_alive(self):
+    def client_connected(self):
         with self.lock:
-            self.client_connected = True
-            self.last_seen = time.monotonic()
+            self.active_clients += 1
+            self.ever_connected = True
+            self.shutdown_deadline = None
+
+    def client_disconnected(self):
+        with self.lock:
+            self.active_clients = max(0, self.active_clients - 1)
+            if self.ever_connected and self.active_clients == 0:
+                self.shutdown_deadline = time.monotonic() + SHUTDOWN_GRACE_SECONDS
+
+    def page_loaded(self):
+        with self.lock:
             self.shutdown_deadline = None
 
     def request_shutdown(self):
         with self.lock:
-            self.client_connected = True
-            self.shutdown_deadline = time.monotonic() + SHUTDOWN_GRACE_SECONDS
+            if self.active_clients <= 1:
+                self.shutdown_deadline = time.monotonic() + SHUTDOWN_GRACE_SECONDS
 
     def should_exit(self):
         with self.lock:
-            now = time.monotonic()
-            if self.shutdown_deadline is not None and now >= self.shutdown_deadline:
-                return "Browser closed"
-            if self.client_connected and (now - self.last_seen) >= HEARTBEAT_TIMEOUT_SECONDS:
-                return "Browser heartbeat timed out"
+            if (
+                self.ever_connected
+                and self.active_clients == 0
+                and self.shutdown_deadline is not None
+                and time.monotonic() >= self.shutdown_deadline
+            ):
+                return "Browser tab closed"
             return None
 
 
 lifecycle = LifecycleState()
+stop_event = threading.Event()
 
 
 class ThreadedHTTPServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
@@ -68,22 +78,36 @@ class RetroHandler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(BASE_DIR), **kwargs)
 
     def log_message(self, format, *args):
-        # Keep console clean (suppress noisy per-file request logs)
+        # Keep console clean
         pass
 
     def do_GET(self):
+        if self.path == "/__events":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+
+            lifecycle.client_connected()
+            try:
+                self.wfile.write(b": connected\n\n")
+                self.wfile.flush()
+                while not stop_event.is_set():
+                    time.sleep(1.0)
+                    self.wfile.write(b": ping\n\n")
+                    self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
+                pass
+            finally:
+                lifecycle.client_disconnected()
+            return
+
         if self.path in ("/", "/index.html"):
-            lifecycle.mark_alive()
+            lifecycle.page_loaded()
         super().do_GET()
 
     def do_POST(self):
-        if self.path == "/__heartbeat":
-            lifecycle.mark_alive()
-            self.send_response(204)
-            self.send_header("Cache-Control", "no-store")
-            self.end_headers()
-            return
-
         if self.path == "/__shutdown":
             lifecycle.request_shutdown()
             self.send_response(204)
@@ -112,8 +136,6 @@ def main():
     actual_port = server.server_address[1]
     url = f"http://127.0.0.1:{actual_port}/"
 
-    stop_event = threading.Event()
-
     def trigger_shutdown(reason=""):
         if stop_event.is_set():
             return
@@ -135,7 +157,7 @@ def main():
             if reason:
                 trigger_shutdown(reason)
                 break
-            time.sleep(0.5)
+            time.sleep(0.4)
 
     threading.Thread(target=watchdog, daemon=True).start()
 
@@ -145,7 +167,6 @@ def main():
     print("  Close this window OR close the browser tab to stop.")
     print("=====================================================")
 
-    # Open browser slightly after binding so the first request lands immediately
     threading.Timer(0.35, lambda: webbrowser.open(url)).start()
 
     try:
@@ -153,6 +174,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
+        stop_event.set()
         server.server_close()
 
 

@@ -35,7 +35,7 @@ body {
     background-size: 20px 20px;
     background-position: 0 0, 10px 10px;
     color: var(--jrpg-text);
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     padding: 12px;
     overflow: hidden;
 }
@@ -210,8 +210,31 @@ canvas.pixel-canvas {
 .hp-label-row {
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    gap: 6px;
     font-size: 8px;
     text-shadow: 2px 2px 0 #000;
+}
+
+.ctx-label-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ctx-reset-banner {
+    font-size: 7.5px;
+    line-height: 1.6;
+    color: var(--jrpg-cyan);
+    text-shadow: 2px 2px 0 #000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 8px;
+    background: rgba(0, 0, 0, 0.55);
+    border-top: 2px dashed var(--jrpg-cyan);
+    border-bottom: 2px dashed var(--jrpg-cyan);
 }
 
 .hp-track {
@@ -226,7 +249,15 @@ canvas.pixel-canvas {
 .hp-fill {
     height: 100%;
     background: var(--jrpg-heal);
-    transition: width 0.25s ease;
+    transition: width 0.25s ease, background-color 0.25s ease;
+}
+
+.hp-fill.ctx-warn {
+    background: var(--jrpg-highlight);
+}
+
+.hp-fill.ctx-danger {
+    background: var(--jrpg-danger);
 }
 
 .sprite-controls {
@@ -315,6 +346,12 @@ canvas.pixel-canvas {
     width: 58px;
     padding: 4px 5px;
     text-align: center;
+}
+
+.jrpg-input-ctx {
+    width: 112px;
+    padding: 4px 6px;
+    text-align: right;
 }
 
 select.jrpg-input {
