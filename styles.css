@@ -1,0 +1,929 @@
+/* =========================================================================
+   16-BIT JRPG RETRO CHATBOT // STYLES
+   Matches the classic FF/DQ blue-panel aesthetic with the 3-column layout
+   from rough.png.
+   ========================================================================= */
+
+:root {
+    --jrpg-bg-top: #0a0a8c;
+    --jrpg-bg-bot: #040440;
+    --jrpg-border-outer: #f8f8f8;
+    --jrpg-border-inner: #909090;
+    --jrpg-text: #f8f8f8;
+    --jrpg-text-dim: #a8b0c8;
+    --jrpg-highlight: #f8e800;
+    --jrpg-danger: #ff3b3b;
+    --jrpg-heal: #28e848;
+    --jrpg-cyan: #5ce1ff;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%;
+}
+
+body {
+    background-color: #000;
+    background-image:
+        linear-gradient(45deg, #0b0b12 25%, transparent 25%, transparent 75%, #0b0b12 75%, #0b0b12),
+        linear-gradient(45deg, #0b0b12 25%, transparent 25%, transparent 75%, #0b0b12 75%, #0b0b12);
+    background-size: 20px 20px;
+    background-position: 0 0, 10px 10px;
+    color: var(--jrpg-text);
+    font-family: 'Press Start 2P', monospace;
+    padding: 12px;
+    overflow: hidden;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.text-highlight { color: var(--jrpg-highlight); }
+.text-dim { color: var(--jrpg-text-dim); }
+.text-danger { color: var(--jrpg-danger); }
+.text-heal { color: var(--jrpg-heal); }
+.text-cyan { color: var(--jrpg-cyan); }
+.text-shadow { text-shadow: 2px 2px 0 #000; }
+
+/* =========================================================================
+   3-COLUMN LAYOUT SHELL (rough.png)
+   ========================================================================= */
+.app-shell {
+    width: 100%;
+    max-width: 1560px;
+    height: 100%;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 310px minmax(420px, 1fr) 320px;
+    gap: 14px;
+}
+
+.col-side {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    min-height: 0;
+}
+
+.col-center {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
+}
+
+/* =========================================================================
+   16-BIT JRPG PANEL / WINDOW
+   ========================================================================= */
+.jrpg-panel {
+    background: linear-gradient(180deg, var(--jrpg-bg-top) 0%, var(--jrpg-bg-bot) 100%);
+    border: 4px solid var(--jrpg-border-outer);
+    box-shadow: inset 0 0 0 3px var(--jrpg-border-inner), 6px 6px 0 rgba(0, 0, 0, 0.75);
+    border-radius: 8px;
+    position: relative;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.jrpg-panel::before {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border: 1px solid #000;
+    border-radius: 4px;
+    pointer-events: none;
+}
+
+.panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 9px;
+    text-shadow: 2px 2px 0 #000;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.25);
+    flex-shrink: 0;
+}
+
+.jrpg-inset {
+    background-color: #000;
+    border: 3px solid var(--jrpg-border-inner);
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.85);
+}
+
+/* =========================================================================
+   LEFT COLUMN: EXPERT VIEWPORT (TOP) & API SETTINGS (BOTTOM)
+   ========================================================================= */
+.panel-expert {
+    flex: 1.15;
+    gap: 8px;
+}
+
+.viewport-box {
+    width: 100%;
+    flex: 1;
+    min-height: 150px;
+    max-height: 230px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+}
+
+.viewport-box canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+canvas.pixel-canvas {
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-crisp-edges;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+.expert-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.expert-identity-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 6px;
+    border-bottom: 2px solid #888;
+    padding-bottom: 6px;
+}
+
+.expert-name-wrap {
+    min-width: 0;
+    flex: 1;
+}
+
+.meta-label {
+    font-size: 7px;
+    color: var(--jrpg-text-dim);
+    margin-bottom: 4px;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.expert-name {
+    font-size: 10px;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.role-badge {
+    font-size: 7px;
+    color: var(--jrpg-highlight);
+    background: #000;
+    border: 2px solid #888;
+    padding: 4px 6px;
+    text-shadow: 1px 1px 0 #000;
+    white-space: nowrap;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.hp-block {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hp-label-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 8px;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.hp-track {
+    width: 100%;
+    height: 14px;
+    background: #000;
+    border: 2px solid var(--jrpg-border-outer);
+    padding: 2px;
+    box-shadow: 2px 2px 0 #000;
+}
+
+.hp-fill {
+    height: 100%;
+    background: var(--jrpg-heal);
+    transition: width 0.25s ease;
+}
+
+.sprite-controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 6px;
+    padding-top: 2px;
+    flex-shrink: 0;
+}
+
+/* Bottom-Left: API Settings */
+.panel-api {
+    flex: 1;
+}
+
+.api-status-pill {
+    font-size: 7px;
+    padding: 2px 5px;
+    background: #000;
+    border: 1px solid var(--jrpg-border-inner);
+    color: var(--jrpg-heal);
+}
+
+.api-status-pill.error {
+    color: var(--jrpg-danger);
+    border-color: var(--jrpg-danger);
+}
+
+.api-status-pill.busy {
+    color: var(--jrpg-highlight);
+    border-color: var(--jrpg-highlight);
+}
+
+.api-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow-y: auto;
+    padding-right: 4px;
+    flex: 1;
+}
+
+.field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.field-group-grow {
+    flex: 1;
+    min-height: 0;
+}
+
+.field-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.field-label {
+    font-size: 7px;
+    color: var(--jrpg-text-dim);
+    text-shadow: 1px 1px 0 #000;
+}
+
+.jrpg-input {
+    width: 100%;
+    background: #000;
+    border: 2px solid var(--jrpg-border-inner);
+    color: var(--jrpg-text);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    line-height: 1.5;
+    padding: 6px 7px;
+    outline: none;
+    box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.7);
+}
+
+.jrpg-input:focus {
+    border-color: var(--jrpg-highlight);
+}
+
+.jrpg-input-sm {
+    width: 58px;
+    padding: 4px 5px;
+    text-align: center;
+}
+
+select.jrpg-input {
+    cursor: pointer;
+}
+
+.api-options-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 2px;
+}
+
+.temp-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.feedback-line {
+    font-size: 7px;
+    line-height: 1.5;
+    color: var(--jrpg-heal);
+    text-shadow: 1px 1px 0 #000;
+}
+
+.feedback-line.error {
+    color: var(--jrpg-danger);
+}
+
+/* =========================================================================
+   CENTER COLUMN: UNIFIED CHAT WINDOW + DIVIDER + INPUT AREA
+   ========================================================================= */
+.panel-chat {
+    height: 100%;
+    padding: 0;
+    overflow: hidden;
+}
+
+.chat-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 14px 10px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.25);
+    flex-shrink: 0;
+}
+
+.chat-title-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 10px;
+}
+
+.thread-badge {
+    font-size: 7px;
+    background: #000;
+    border: 2px solid var(--jrpg-border-inner);
+    color: var(--jrpg-cyan);
+    padding: 3px 6px;
+    text-shadow: 1px 1px 0 #000;
+}
+
+.chat-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+
+.chat-feed {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+/* JRPG Message Boxes */
+.msg-bot {
+    background: linear-gradient(180deg, #1010a0 0%, #000030 100%);
+    border: 3px solid var(--jrpg-border-outer);
+    box-shadow: inset 0 0 0 2px var(--jrpg-border-inner), 4px 4px 0 rgba(0, 0, 0, 0.55);
+    border-radius: 4px;
+    padding: 11px 12px;
+    margin-right: 18px;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.msg-user {
+    background: linear-gradient(180deg, #801010 0%, #300000 100%);
+    border: 3px solid var(--jrpg-border-outer);
+    box-shadow: inset 0 0 0 2px var(--jrpg-border-inner), 4px 4px 0 rgba(0, 0, 0, 0.55);
+    border-radius: 4px;
+    padding: 11px 12px;
+    margin-left: 28px;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.msg-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-bottom: 2px solid #888;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+}
+
+.msg-speaker-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.msg-badge-canvas {
+    width: 26px;
+    height: 26px;
+    background: #000;
+    border: 2px solid var(--jrpg-border-outer);
+    flex-shrink: 0;
+}
+
+.msg-speaker-name {
+    font-size: 9px;
+    color: var(--jrpg-highlight);
+}
+
+.msg-speaker-role {
+    font-size: 7px;
+    background: #000;
+    border: 1px solid #888;
+    padding: 2px 5px;
+    color: #fff;
+}
+
+.msg-time {
+    font-size: 7px;
+    color: var(--jrpg-text-dim);
+    flex-shrink: 0;
+}
+
+.msg-body {
+    font-size: 10px;
+    line-height: 1.85;
+    color: #fff;
+    word-break: break-word;
+}
+
+.msg-body code {
+    background: #000;
+    border: 1px solid #888;
+    padding: 1px 4px;
+    color: var(--jrpg-highlight);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+}
+
+.msg-body pre {
+    background: #000;
+    border: 2px solid var(--jrpg-border-inner);
+    padding: 8px;
+    margin: 8px 0;
+    overflow-x: auto;
+    font-size: 8px;
+    line-height: 1.6;
+    color: var(--jrpg-heal);
+}
+
+.sys-banner {
+    font-size: 8px;
+    line-height: 1.6;
+    color: var(--jrpg-highlight);
+    text-shadow: 2px 2px 0 #000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 6px;
+    background: rgba(0, 0, 0, 0.35);
+    border-left: 3px solid var(--jrpg-highlight);
+}
+
+/* Second Opinion Quick Bar */
+.second-opinion-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 14px;
+    background: rgba(0, 0, 0, 0.55);
+    border-top: 2px solid var(--jrpg-highlight);
+    font-size: 8px;
+    text-shadow: 2px 2px 0 #000;
+    flex-shrink: 0;
+}
+
+/* Horizontal Divider inside Chat Window (matching rough.png) */
+.chat-divider {
+    height: 6px;
+    margin: 0 14px;
+    border-top: 3px solid var(--jrpg-border-outer);
+    border-bottom: 2px solid var(--jrpg-border-inner);
+    flex-shrink: 0;
+}
+
+/* Chat Input Area */
+.chat-input-area {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px 14px;
+    flex-shrink: 0;
+}
+
+.input-prompt-wrap {
+    flex: 1;
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    padding: 8px 10px;
+}
+
+.input-prompt-wrap:focus-within {
+    border-color: var(--jrpg-highlight);
+}
+
+.prompt-cursor {
+    font-size: 12px;
+    line-height: 1.5;
+    user-select: none;
+}
+
+#command-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    resize: none;
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+    line-height: 1.7;
+    outline: none;
+    text-shadow: 2px 2px 0 #000;
+}
+
+#command-input::placeholder {
+    color: #8892b0;
+}
+
+.input-actions {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.btn-action {
+    min-width: 96px;
+    padding: 12px 14px;
+    font-size: 9px;
+}
+
+/* =========================================================================
+   RIGHT COLUMN: EXPERT SELECTOR (TOP) & SYSTEM INSTRUCTIONS (BOTTOM)
+   ========================================================================= */
+.panel-roster {
+    flex: 1.05;
+}
+
+.mode-pill {
+    font-size: 7px;
+    color: var(--jrpg-cyan);
+}
+
+.roster-hint {
+    font-size: 7px;
+    line-height: 1.5;
+    color: var(--jrpg-highlight);
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--jrpg-highlight);
+    padding: 5px 6px;
+    margin-bottom: 8px;
+    text-shadow: 1px 1px 0 #000;
+    flex-shrink: 0;
+}
+
+.roster-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 7px;
+    overflow-y: auto;
+    padding-right: 3px;
+    flex: 1;
+    align-content: start;
+}
+
+.roster-slot {
+    background-color: rgba(0, 0, 0, 0.5);
+    border: 2px solid var(--jrpg-border-inner);
+    border-radius: 4px;
+    padding: 5px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    color: var(--jrpg-text);
+    font-family: 'Press Start 2P', monospace;
+    transition: border-color 0.1s ease, background-color 0.1s ease;
+    position: relative;
+}
+
+.roster-slot:hover {
+    border-color: var(--jrpg-text);
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.roster-slot.active {
+    background-color: var(--jrpg-bg-top);
+    border-color: var(--jrpg-highlight);
+    box-shadow: 0 0 8px rgba(248, 232, 0, 0.45);
+}
+
+.roster-slot-top {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    font-size: 6px;
+    color: var(--jrpg-text-dim);
+}
+
+.roster-slot-canvas {
+    width: 44px;
+    height: 48px;
+    display: block;
+}
+
+.roster-slot-name {
+    font-size: 6px;
+    color: #fff;
+    width: 100%;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.roster-slot-role {
+    font-size: 5px;
+    color: var(--jrpg-highlight);
+    width: 100%;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Bottom-Right: Per-Expert System Instructions */
+.panel-instructions {
+    flex: 1.05;
+}
+
+.instructions-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-height: 0;
+}
+
+.instructions-scope-note {
+    font-size: 6.5px;
+    line-height: 1.4;
+    color: var(--jrpg-cyan);
+    text-shadow: 1px 1px 0 #000;
+    flex-shrink: 0;
+}
+
+.profile-edit-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.jrpg-textarea {
+    flex: 1;
+    min-height: 90px;
+    resize: none;
+    line-height: 1.65;
+    font-size: 8px;
+}
+
+.prompt-hidden-box {
+    flex: 1;
+    min-height: 90px;
+    background: #000;
+    border: 2px dashed var(--jrpg-border-inner);
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 10px;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.85);
+}
+
+.prompt-hidden-title {
+    font-size: 8px;
+    text-shadow: 2px 2px 0 #000;
+}
+
+.prompt-hidden-sub {
+    font-size: 6.5px;
+    line-height: 1.6;
+    color: var(--jrpg-text-dim);
+    max-width: 230px;
+}
+
+.instructions-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.feedback-inline {
+    font-size: 7px;
+    color: var(--jrpg-heal);
+    text-shadow: 1px 1px 0 #000;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.feedback-inline.visible {
+    opacity: 1;
+}
+
+.instructions-btn-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* =========================================================================
+   16-BIT BUTTONS
+   ========================================================================= */
+.btn-jrpg {
+    background: transparent;
+    color: var(--jrpg-text);
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    position: relative;
+    padding-left: 14px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    text-shadow: 2px 2px 0 #000;
+    user-select: none;
+    transition: color 0.1s;
+}
+
+.btn-jrpg.btn-xs {
+    font-size: 7.5px;
+}
+
+.btn-jrpg:hover:not(:disabled),
+.btn-jrpg.active {
+    color: var(--jrpg-highlight);
+}
+
+.btn-jrpg:hover:not(:disabled)::before,
+.btn-jrpg.active::before {
+    content: '▶';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--jrpg-highlight);
+    text-shadow: 2px 2px 0 #000;
+}
+
+.btn-jrpg:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-solid {
+    background-color: #000;
+    border: 2px solid var(--jrpg-border-outer);
+    color: var(--jrpg-text);
+    padding: 7px 10px;
+    cursor: pointer;
+    text-align: center;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    box-shadow: 2px 2px 0 #000;
+    user-select: none;
+}
+
+.btn-solid.btn-xs {
+    padding: 5px 8px;
+    font-size: 7.5px;
+}
+
+.btn-solid:hover:not(:disabled) {
+    background-color: var(--jrpg-bg-top);
+    border-color: var(--jrpg-highlight);
+    color: var(--jrpg-highlight);
+}
+
+.btn-solid:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: none;
+}
+
+.btn-solid:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.btn-solid.btn-danger {
+    border-color: var(--jrpg-danger);
+    color: var(--jrpg-danger);
+}
+
+.btn-mini {
+    background: #000;
+    border: 1px solid var(--jrpg-border-inner);
+    color: var(--jrpg-highlight);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 6.5px;
+    padding: 2px 5px;
+    cursor: pointer;
+}
+
+.btn-mini:hover:not(:disabled) {
+    border-color: var(--jrpg-highlight);
+    background: var(--jrpg-bg-top);
+}
+
+/* =========================================================================
+   SCROLLBARS & BLINKING CURSOR
+   ========================================================================= */
+.terminal-scroll::-webkit-scrollbar {
+    width: 12px;
+}
+
+.terminal-scroll::-webkit-scrollbar-track {
+    background: #000;
+    border-left: 2px solid var(--jrpg-border-inner);
+}
+
+.terminal-scroll::-webkit-scrollbar-thumb {
+    background: var(--jrpg-bg-bot);
+    border: 2px solid var(--jrpg-border-outer);
+}
+
+.terminal-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--jrpg-bg-top);
+}
+
+.cursor-block {
+    display: inline-block;
+    width: 8px;
+    height: 13px;
+    background-color: var(--jrpg-text);
+    vertical-align: middle;
+    margin-left: 4px;
+    animation: cursorBlink 0.75s steps(2, start) infinite;
+}
+
+@keyframes cursorBlink {
+    to { visibility: hidden; }
+}
+
+/* =========================================================================
+   RESPONSIVE FALLBACK (TABLET / MOBILE)
+   ========================================================================= */
+@media (max-width: 1120px) {
+    body {
+        overflow-y: auto;
+        height: auto;
+    }
+
+    .app-shell {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .panel-chat {
+        min-height: 540px;
+    }
+
+    .col-side {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    }
+}

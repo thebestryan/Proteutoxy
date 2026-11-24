@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>16-BIT EXPERT TERMINAL // Retro RPG Chatbot</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- 3-Column JRPG Layout matching rough.png -->
+    <div class="app-shell">
+
+        <!-- =============================================================== -->
+        <!-- LEFT COLUMN: Character/Expert Window (Top) + API Settings (Bot) -->
+        <!-- =============================================================== -->
+        <aside class="col-side col-left">
+
+            <!-- TOP-LEFT: Character / Expert Window -->
+            <section class="jrpg-panel panel-expert">
+                <div class="panel-header">
+                    <span class="text-highlight">▶ EXPERT</span>
+                    <span id="viewport-unit-code" class="text-dim">UNIT-01</span>
+                </div>
+
+                <!-- 16-Bit Battle Viewport Canvas -->
+                <div class="jrpg-inset viewport-box">
+                    <canvas id="portrait-canvas" width="280" height="220" class="pixel-canvas"></canvas>
+                </div>
+
+                <!-- Active Expert Identity & Status -->
+                <div class="expert-meta">
+                    <div class="expert-identity-row">
+                        <div class="expert-name-wrap">
+                            <div class="meta-label">ACTIVE EXPERT</div>
+                            <div id="telemetry-name" class="expert-name text-shadow">DR. ARIS VANCE</div>
+                        </div>
+                        <span id="telemetry-class-badge" class="role-badge">SCIENTIST</span>
+                    </div>
+
+                    <div class="hp-block">
+                        <div class="hp-label-row">
+                            <span>SYNC</span>
+                            <span id="telemetry-signal-text">98/100</span>
+                        </div>
+                        <div class="hp-track">
+                            <div id="hp-bar-fill" class="hp-fill" style="width: 98%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sprite Controls -->
+                <div class="sprite-controls">
+                    <button id="toggle-chromakey-btn" type="button" class="btn-jrpg btn-xs">BG KEY: ON</button>
+                    <label for="custom-sprite-input" class="btn-jrpg btn-xs">SET SPRITE</label>
+                    <input id="custom-sprite-input" type="file" accept="image/*" class="hidden">
+                    <button id="reset-sprite-btn" type="button" class="btn-jrpg btn-xs text-danger hidden">RESET IMG</button>
+                </div>
+            </section>
+
+            <!-- BOTTOM-LEFT: Chat API Settings Window (OpenAI-Compatible) -->
+            <section class="jrpg-panel panel-api">
+                <div class="panel-header">
+                    <span class="text-highlight">▶ API SETTINGS</span>
+                    <span id="api-status-badge" class="api-status-pill">READY</span>
+                </div>
+
+                <div class="api-form terminal-scroll">
+                    <div class="field-group">
+                        <label for="api-preset-select" class="field-label">PROVIDER PRESET</label>
+                        <select id="api-preset-select" class="jrpg-input">
+                            <option value="openrouter">OpenRouter</option>
+                            <option value="venice">Venice</option>
+                            <option value="nanogpt">NanoGPT</option>
+                            <option value="pollinations">Pollinations</option>
+                            <option value="lmstudio">LM Studio (Local)</option>
+                            <option value="ollama">Ollama (Local)</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="custom">Custom OpenAI-Compatible</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group">
+                        <label for="api-base-url" class="field-label">BASE URL</label>
+                        <input id="api-base-url" type="text" class="jrpg-input" placeholder="https://openrouter.ai/api/v1" spellcheck="false">
+                    </div>
+
+                    <div class="field-group">
+                        <div class="field-label-row">
+                            <label for="api-key-input" class="field-label">API KEY</label>
+                            <button id="toggle-key-vis-btn" type="button" class="btn-mini">SHOW</button>
+                        </div>
+                        <input id="api-key-input" type="password" class="jrpg-input" placeholder="Optional for local servers" autocomplete="off">
+                    </div>
+
+                    <div class="field-group">
+                        <div class="field-label-row">
+                            <label for="api-model-input" class="field-label">MODEL ID</label>
+                            <button id="fetch-models-btn" type="button" class="btn-mini">FETCH</button>
+                        </div>
+                        <input id="api-model-input" type="text" list="api-model-list" class="jrpg-input" placeholder="e.g. openai/gpt-4o-mini" spellcheck="false">
+                        <datalist id="api-model-list"></datalist>
+                    </div>
+
+                    <div class="api-options-row">
+                        <button id="toggle-stream-btn" type="button" class="btn-jrpg btn-xs text-highlight">STREAM: ON</button>
+                        <div class="temp-wrap" title="Sampling temperature (0.0 - 2.0)">
+                            <span class="field-label">TEMP</span>
+                            <input id="api-temp-input" type="number" min="0" max="2" step="0.1" value="0.7" class="jrpg-input jrpg-input-sm">
+                        </div>
+                    </div>
+
+                    <div id="api-feedback" class="feedback-line hidden"></div>
+                </div>
+            </section>
+
+        </aside>
+
+        <!-- =============================================================== -->
+        <!-- CENTER COLUMN: Unified Chat Window + Horizontal Divider + Input -->
+        <!-- =============================================================== -->
+        <main class="col-center">
+            <section class="jrpg-panel panel-chat">
+
+                <!-- Chat Window Header -->
+                <header class="chat-header">
+                    <div class="chat-title-group">
+                        <span class="text-highlight text-shadow">▶ CHAT WINDOW</span>
+                        <span id="thread-owner-badge" class="thread-badge">THREAD: DR. ARIS</span>
+                    </div>
+                    <div class="chat-toolbar">
+                        <button
+                            id="toggle-second-opinion-btn"
+                            type="button"
+                            class="btn-jrpg btn-xs"
+                            title="When ON, switching experts keeps you in this same thread so another expert can weigh in"
+                        >2ND OPINION: OFF</button>
+                        <button id="toggle-sfx-btn" type="button" class="btn-jrpg btn-xs">SFX: ON</button>
+                        <button id="clear-log-btn" type="button" class="btn-jrpg btn-xs text-danger">CLEAR</button>
+                    </div>
+                </header>
+
+                <!-- Chat Messages Feed -->
+                <div id="chat-feed" class="chat-feed terminal-scroll" aria-live="polite">
+                    <!-- Dynamic messages -->
+                </div>
+
+                <!-- Second Opinion Quick Action Banner -->
+                <div id="second-opinion-bar" class="second-opinion-bar hidden">
+                    <span id="second-opinion-text" class="text-highlight">▶ EXPERT READY TO WEIGH IN</span>
+                    <button id="ask-second-opinion-btn" type="button" class="btn-solid btn-xs">GET OPINION</button>
+                </div>
+
+                <!-- Horizontal Divider Line (from rough.png) -->
+                <div class="chat-divider" aria-hidden="true"></div>
+
+                <!-- Chat Input Area -->
+                <form id="command-form" class="chat-input-area">
+                    <div class="input-prompt-wrap">
+                        <span class="prompt-cursor text-highlight text-shadow" aria-hidden="true">▶</span>
+                        <textarea
+                            id="command-input"
+                            rows="3"
+                            placeholder="What will you ask? (Enter to send, Shift+Enter for newline)"
+                            spellcheck="false"
+                        ></textarea>
+                    </div>
+                    <div class="input-actions">
+                        <button id="transmit-btn" type="submit" class="btn-solid btn-action">ACTION</button>
+                        <button id="stop-btn" type="button" class="btn-solid btn-action btn-danger hidden">STOP</button>
+                    </div>
+                </form>
+
+            </section>
+        </main>
+
+        <!-- =============================================================== -->
+        <!-- RIGHT COLUMN: Choose Expert (Top) + System Instructions (Bot)   -->
+        <!-- =============================================================== -->
+        <aside class="col-side col-right">
+
+            <!-- TOP-RIGHT: Choose Expert / Character Window -->
+            <section class="jrpg-panel panel-roster">
+                <div class="panel-header">
+                    <span class="text-highlight">▶ CHOOSE EXPERT</span>
+                    <span id="roster-mode-badge" class="mode-pill">9 UNITS</span>
+                </div>
+                <div id="roster-mode-hint" class="roster-hint hidden">
+                    2ND OPINION ON: PICK AN EXPERT TO JOIN THIS THREAD
+                </div>
+                <div id="roster-grid" class="roster-grid terminal-scroll">
+                    <!-- 9 expert slots generated dynamically -->
+                </div>
+            </section>
+
+            <!-- BOTTOM-RIGHT: Per-Expert System Instructions & Rename Window -->
+            <section class="jrpg-panel panel-instructions">
+                <div class="panel-header">
+                    <span class="text-highlight">▶ INSTRUCTIONS</span>
+                    <span id="instructions-expert-tag" class="text-dim">UNIT-01</span>
+                </div>
+
+                <div class="instructions-body">
+                    <div class="instructions-scope-note">
+                        EDITS APPLY ONLY TO SELECTED EXPERT
+                    </div>
+
+                    <div class="profile-edit-grid">
+                        <div class="field-group">
+                            <label for="expert-name-input" class="field-label">EXPERT NAME</label>
+                            <input id="expert-name-input" type="text" class="jrpg-input" maxlength="28" spellcheck="false">
+                        </div>
+                        <div class="field-group">
+                            <label for="expert-title-input" class="field-label">TITLE / ROLE</label>
+                            <input id="expert-title-input" type="text" class="jrpg-input" maxlength="20" spellcheck="false">
+                        </div>
+                    </div>
+
+                    <div class="field-group field-group-grow">
+                        <div class="field-label-row">
+                            <label for="system-prompt-input" class="field-label">SYSTEM INSTRUCTIONS</label>
+                            <button id="toggle-prompt-vis-btn" type="button" class="btn-mini">OPEN</button>
+                        </div>
+                        <div id="system-prompt-hidden-box" class="prompt-hidden-box">
+                            <div class="prompt-hidden-title text-highlight">★ CLASSIFIED ★</div>
+                            <div class="prompt-hidden-sub">INSTRUCTIONS HIDDEN.</div>
+                            <button id="open-prompt-box-btn" type="button" class="btn-solid btn-xs">OPEN</button>
+                        </div>
+                        <textarea
+                            id="system-prompt-input"
+                            class="jrpg-input jrpg-textarea terminal-scroll hidden"
+                            placeholder="Define this expert's persona, tone, and expertise..."
+                            spellcheck="false"
+                        ></textarea>
+                    </div>
+
+                    <div class="instructions-footer">
+                        <span id="instructions-feedback" class="feedback-inline">AUTO-SAVED</span>
+                        <div class="instructions-btn-row">
+                            <button id="save-expert-btn" type="button" class="btn-solid btn-xs">SAVE</button>
+                            <button id="reset-expert-btn" type="button" class="btn-jrpg btn-xs text-danger">DEFAULT</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </aside>
+
+    </div>
+
+    <script src="experts.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
