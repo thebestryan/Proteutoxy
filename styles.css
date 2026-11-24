@@ -330,7 +330,7 @@ canvas.pixel-canvas {
     background: #000;
     border: 2px solid var(--jrpg-border-inner);
     color: var(--jrpg-text);
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     font-size: 8px;
     line-height: 1.5;
     padding: 6px 7px;
@@ -521,7 +521,7 @@ select.jrpg-input {
     background: rgba(0, 0, 0, 0.75);
     border: 1px solid var(--jrpg-border-inner);
     color: var(--jrpg-text-dim);
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     font-size: 6px;
     padding: 2px 4px;
     cursor: pointer;
@@ -549,7 +549,7 @@ select.jrpg-input {
     background: #000;
     border: 2px solid var(--jrpg-highlight);
     color: #fff;
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     font-size: 9px;
     line-height: 1.7;
     padding: 8px;
@@ -676,7 +676,7 @@ select.jrpg-input {
     border: 1px solid #888;
     padding: 1px 4px;
     color: var(--jrpg-highlight);
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     font-size: 9px;
 }
 
@@ -762,7 +762,7 @@ select.jrpg-input {
     border: none;
     resize: none;
     color: #fff;
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     font-size: 10px;
     line-height: 1.7;
     outline: none;
@@ -832,7 +832,7 @@ select.jrpg-input {
     gap: 3px;
     cursor: pointer;
     color: var(--jrpg-text);
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     transition: border-color 0.1s ease, background-color 0.1s ease;
     position: relative;
 }
@@ -863,7 +863,7 @@ select.jrpg-input {
 }
 
 .roster-slot-name {
-    font-size: 6px;
+    font-size: 5px;
     color: #fff;
     width: 100%;
     text-align: center;
@@ -982,7 +982,7 @@ select.jrpg-input {
     text-align: left;
     position: relative;
     padding-left: 14px;
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     font-size: 8px;
     text-shadow: 2px 2px 0 #000;
     user-select: none;
@@ -1021,7 +1021,7 @@ select.jrpg-input {
     padding: 7px 10px;
     cursor: pointer;
     text-align: center;
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     font-size: 8px;
     box-shadow: 2px 2px 0 #000;
     user-select: none;
@@ -1057,7 +1057,7 @@ select.jrpg-input {
     background: #000;
     border: 1px solid var(--jrpg-border-inner);
     color: var(--jrpg-highlight);
-    font-family: 'Press Start 2P', monospace;
+    font-family: 'VT323', monospace;
     font-size: 6.5px;
     padding: 2px 5px;
     cursor: pointer;
