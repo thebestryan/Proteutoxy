@@ -8,9 +8,14 @@
     const STORAGE_KEYS = {
         API: "retro16_api_config_v1",
         EXPERTS: "retro16_expert_overrides_v1",
+        EXPERTS_LIST: "retro16_experts_list_v2",
         THREADS: "retro16_chat_threads_v1",
+        SAVES: "retro16_saved_chats_v1",
         PREFS: "retro16_ui_prefs_v1"
     };
+
+    const NO_EMOJI_HARD_RULE =
+        "HARD RULE: Never use emojis, emoticons, or Unicode pictographs anywhere in your response. Use plain text only.";
 
     // =====================================================================
     // 1. STATE
@@ -19,6 +24,7 @@
         experts: [],
         selectedId: "scientist",
         activeThreadId: "scientist",
+        activeBranchLabel: null,
         secondOpinionMode: false,
         pendingOpinionSwitch: false,
         sfxEnabled: true,
@@ -28,6 +34,8 @@
         abortController: null,
         clearConfirmArmed: false,
         clearConfirmTimeout: null,
+        deleteExpertArmed: false,
+        deleteExpertTimeout: null,
         api: {
             preset: "openrouter",
             baseUrl: window.API_PRESETS.openrouter.baseUrl,
@@ -37,6 +45,7 @@
             temperature: 0.7
         },
         threads: {}, // { [threadId]: [ { type: 'user'|'bot'|'system', text, expertId?, expertName?, expertTitle?, time } ] }
+        savedChats: [], // [ { id, name, threadId, expertId, isBranch, createdAt, messages } ]
         loadedSheets: {},
         slicedSprites: {}, // { [expertId]: HTMLCanvasElement }
         customSpriteImages: {} // { [expertId]: HTMLImageElement }
@@ -70,6 +79,14 @@
 
         threadOwnerBadge: document.getElementById("thread-owner-badge"),
         toggleSecondOpinionBtn: document.getElementById("toggle-second-opinion-btn"),
+        openSavesBtn: document.getElementById("open-saves-btn"),
+        savesDrawer: document.getElementById("saves-drawer"),
+        closeSavesBtn: document.getElementById("close-saves-btn"),
+        saveSlotNameInput: document.getElementById("save-slot-name-input"),
+        saveChatBtn: document.getElementById("save-chat-btn"),
+        branchCurrentBtn: document.getElementById("branch-current-btn"),
+        exportChatBtn: document.getElementById("export-chat-btn"),
+        savesList: document.getElementById("saves-list"),
         toggleSfxBtn: document.getElementById("toggle-sfx-btn"),
         clearLogBtn: document.getElementById("clear-log-btn"),
         chatFeed: document.getElementById("chat-feed"),
@@ -84,6 +101,7 @@
         rosterGrid: document.getElementById("roster-grid"),
         rosterModeBadge: document.getElementById("roster-mode-badge"),
         rosterModeHint: document.getElementById("roster-mode-hint"),
+        addExpertBtn: document.getElementById("add-expert-btn"),
 
         instructionsExpertTag: document.getElementById("instructions-expert-tag"),
         expertNameInput: document.getElementById("expert-name-input"),
@@ -94,6 +112,7 @@
         systemPromptInput: document.getElementById("system-prompt-input"),
         saveExpertBtn: document.getElementById("save-expert-btn"),
         resetExpertBtn: document.getElementById("reset-expert-btn"),
+        deleteExpertBtn: document.getElementById("delete-expert-btn"),
         instructionsFeedback: document.getElementById("instructions-feedback")
     };
 
@@ -188,16 +207,26 @@
             if (savedPrefs.selectedId) state.selectedId = savedPrefs.selectedId;
         }
 
-        const overrides = safeReadJSON(STORAGE_KEYS.EXPERTS, {});
-        state.experts = window.DEFAULT_EXPERTS.map((def) => {
-            const ov = overrides[def.id] || {};
-            return {
-                ...def,
-                name: ov.name || def.name,
-                title: ov.title || def.title,
-                systemPrompt: typeof ov.systemPrompt === "string" ? ov.systemPrompt : def.systemPrompt
-            };
-        });
+        const savedList = safeReadJSON(STORAGE_KEYS.EXPERTS_LIST, null);
+        if (Array.isArray(savedList) && savedList.length > 0) {
+            state.experts = savedList.map((item, idx) => ({
+                ...item,
+                slot: idx + 1,
+                unitCode: item.unitCode || `UNIT-${String(idx + 1).padStart(2, "0")}`,
+                signal: typeof item.signal === "number" ? item.signal : 95
+            }));
+        } else {
+            const overrides = safeReadJSON(STORAGE_KEYS.EXPERTS, {});
+            state.experts = window.DEFAULT_EXPERTS.map((def) => {
+                const ov = overrides[def.id] || {};
+                return {
+                    ...def,
+                    name: ov.name || def.name,
+                    title: ov.title || def.title,
+                    systemPrompt: typeof ov.systemPrompt === "string" ? ov.systemPrompt : def.systemPrompt
+                };
+            });
+        }
 
         if (!getExpertById(state.selectedId)) {
             state.selectedId = state.experts[0].id;
@@ -206,6 +235,9 @@
 
         const savedThreads = safeReadJSON(STORAGE_KEYS.THREADS, {});
         state.threads = savedThreads && typeof savedThreads === "object" ? savedThreads : {};
+
+        const savedChats = safeReadJSON(STORAGE_KEYS.SAVES, []);
+        state.savedChats = Array.isArray(savedChats) ? savedChats : [];
     }
 
     function saveApiConfig() {
@@ -222,19 +254,21 @@
     }
 
     function saveExpertOverrides() {
-        const overrides = {};
-        state.experts.forEach((exp) => {
-            overrides[exp.id] = {
-                name: exp.name,
-                title: exp.title,
-                systemPrompt: exp.systemPrompt
-            };
-        });
-        safeWriteJSON(STORAGE_KEYS.EXPERTS, overrides);
+        safeWriteJSON(STORAGE_KEYS.EXPERTS_LIST, state.experts);
     }
 
     function saveThreads() {
         safeWriteJSON(STORAGE_KEYS.THREADS, state.threads);
+        // Keep active branch record synced if currently chatting in a saved branch
+        const matchingBranch = state.savedChats.find((s) => s.isBranch && s.threadId === state.activeThreadId);
+        if (matchingBranch) {
+            matchingBranch.messages = JSON.parse(JSON.stringify(getThread(state.activeThreadId)));
+            saveSavedChats();
+        }
+    }
+
+    function saveSavedChats() {
+        safeWriteJSON(STORAGE_KEYS.SAVES, state.savedChats);
     }
 
     // =====================================================================
@@ -430,6 +464,15 @@
                 }
             })
         );
+        // Load any persisted custom uploaded sprites
+        await Promise.all(
+            state.experts.map(async (exp) => {
+                if (exp.customSpriteDataUrl) {
+                    const img = await loadImage(exp.customSpriteDataUrl);
+                    if (img) state.customSpriteImages[exp.id] = img;
+                }
+            })
+        );
         rebuildAllSprites();
     }
 
@@ -442,7 +485,7 @@
             );
             return;
         }
-        const sheetInfo = state.loadedSheets[expert.sprite.sheet];
+        const sheetInfo = expert.sprite && state.loadedSheets[expert.sprite.sheet];
         if (sheetInfo && sheetInfo.img) {
             state.slicedSprites[expert.id] = extractSpriteCanvas(
                 sheetInfo.img,
@@ -554,7 +597,7 @@
 
             const top = document.createElement("div");
             top.className = "roster-slot-top";
-            top.innerHTML = `<span>0${exp.slot}</span>`;
+            top.innerHTML = `<span>${String(exp.slot).padStart(2, "0")}</span>`;
 
             const canvas = document.createElement("canvas");
             canvas.width = 44;
@@ -649,15 +692,21 @@
 
         // Sync Thread Badge
         const owner = getExpertById(state.activeThreadId) || exp;
-        if (state.secondOpinionMode) {
+        if (state.activeBranchLabel) {
+            dom.threadOwnerBadge.textContent = `BRANCH: ${state.activeBranchLabel}`;
+            dom.rosterModeBadge.textContent = state.secondOpinionMode ? "2ND OPINION" : `${state.experts.length} UNITS`;
+            dom.rosterModeHint.classList.toggle("hidden", !state.secondOpinionMode);
+        } else if (state.secondOpinionMode) {
             dom.threadOwnerBadge.textContent = `2ND OPINION // ${getShortName(exp.name)}`;
             dom.rosterModeBadge.textContent = "2ND OPINION";
             dom.rosterModeHint.classList.remove("hidden");
         } else {
             dom.threadOwnerBadge.textContent = `THREAD: ${getShortName(owner.name)}`;
-            dom.rosterModeBadge.textContent = "9 UNITS";
+            dom.rosterModeBadge.textContent = `${state.experts.length} UNITS`;
             dom.rosterModeHint.classList.add("hidden");
         }
+
+        dom.deleteExpertBtn.disabled = state.experts.length <= 1;
 
         updateSecondOpinionBar();
     }
@@ -692,6 +741,7 @@
 
         state.selectedId = expertId;
         setInstructionsOpen(false);
+        resetDeleteExpertArm();
         sfx.switchUnit();
         savePrefs();
 
@@ -708,11 +758,99 @@
         } else {
             // Switch to this expert's own dedicated conversation thread
             state.activeThreadId = expertId;
+            state.activeBranchLabel = null;
             state.pendingOpinionSwitch = false;
             ensureThreadGreeting(expertId);
             syncExpertUI();
             renderActiveThread();
         }
+    }
+
+    function resetDeleteExpertArm() {
+        clearTimeout(state.deleteExpertTimeout);
+        state.deleteExpertArmed = false;
+        dom.deleteExpertBtn.textContent = "DEL";
+    }
+
+    function addCustomExpert() {
+        const nextNum = state.experts.length + 1;
+        const id = `custom_${Date.now()}`;
+        const newExpert = {
+            id,
+            slot: nextNum,
+            unitCode: `UNIT-${String(nextNum).padStart(2, "0")}`,
+            name: `EXPERT ${nextNum}`,
+            title: "SPECIALIST",
+            signal: 95,
+            sprite: null,
+            isCustom: true,
+            greeting: "Hello! I am ready to help. Use SET SPRITE to give me a custom portrait and edit my Name, Title, and Instructions on the right.",
+            systemPrompt: "You are a helpful, knowledgeable specialist. Give clear, concise, practical answers tailored to the user's needs."
+        };
+
+        state.experts.push(newExpert);
+        saveExpertOverrides();
+        rebuildExpertSprite(newExpert);
+        buildRosterGrid();
+
+        state.selectedId = newExpert.id;
+        if (!state.secondOpinionMode) {
+            state.activeThreadId = newExpert.id;
+            state.activeBranchLabel = null;
+            ensureThreadGreeting(newExpert.id);
+        }
+        savePrefs();
+        syncExpertUI();
+        renderActiveThread();
+        setInstructionsOpen(true);
+        dom.expertNameInput.focus();
+        dom.expertNameInput.select();
+        sfx.switchUnit();
+        flashInstructionsSaved("ADDED!");
+    }
+
+    function deleteActiveExpert() {
+        if (state.experts.length <= 1) {
+            flashInstructionsSaved("MIN 1 UNIT");
+            return;
+        }
+        sfx.click();
+        if (!state.deleteExpertArmed) {
+            state.deleteExpertArmed = true;
+            dom.deleteExpertBtn.textContent = "SURE?";
+            state.deleteExpertTimeout = setTimeout(resetDeleteExpertArm, 3000);
+            return;
+        }
+
+        resetDeleteExpertArm();
+        const idx = state.experts.findIndex((e) => e.id === state.selectedId);
+        if (idx === -1) return;
+
+        const removed = state.experts[idx];
+        state.experts.splice(idx, 1);
+        delete state.slicedSprites[removed.id];
+        delete state.customSpriteImages[removed.id];
+
+        // Re-index slots cleanly
+        state.experts.forEach((exp, i) => {
+            exp.slot = i + 1;
+        });
+
+        const nextExpert = state.experts[Math.min(idx, state.experts.length - 1)];
+        state.selectedId = nextExpert.id;
+        if (state.activeThreadId === removed.id) {
+            state.activeThreadId = nextExpert.id;
+            state.activeBranchLabel = null;
+            ensureThreadGreeting(nextExpert.id);
+        }
+
+        saveExpertOverrides();
+        savePrefs();
+        buildRosterGrid();
+        setInstructionsOpen(false);
+        syncExpertUI();
+        renderActiveThread();
+        flashInstructionsSaved("DELETED!");
     }
 
     // =====================================================================
@@ -780,7 +918,285 @@
         dom.chatFeed.scrollTop = dom.chatFeed.scrollHeight;
     }
 
-    function createMessageElement(msg) {
+    function buildMsgActionsEl(msgIndex) {
+        const wrap = document.createElement("div");
+        wrap.className = "msg-actions";
+
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "msg-act-btn";
+        editBtn.textContent = "EDIT";
+        editBtn.title = "Edit this message";
+        editBtn.addEventListener("click", () => startInlineEditMessage(msgIndex));
+
+        const branchBtn = document.createElement("button");
+        branchBtn.type = "button";
+        branchBtn.className = "msg-act-btn";
+        branchBtn.textContent = "BRANCH";
+        branchBtn.title = "Branch a new conversation from this message";
+        branchBtn.addEventListener("click", () => branchConversationAt(msgIndex));
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "msg-act-btn danger";
+        delBtn.textContent = "DEL";
+        delBtn.title = "Delete this message";
+        delBtn.addEventListener("click", () => deleteMessageAt(msgIndex));
+
+        wrap.appendChild(editBtn);
+        wrap.appendChild(branchBtn);
+        wrap.appendChild(delBtn);
+        return wrap;
+    }
+
+    function startInlineEditMessage(msgIndex) {
+        if (state.isGenerating) return;
+        const thread = getThread(state.activeThreadId);
+        const msg = thread[msgIndex];
+        if (!msg || msg.type === "system") return;
+
+        const cardEl = dom.chatFeed.querySelector(`[data-msg-index="${msgIndex}"]`);
+        if (!cardEl) return;
+        const bodyEl = cardEl.querySelector(".msg-body");
+        if (!bodyEl || bodyEl.querySelector(".msg-edit-textarea")) return;
+
+        sfx.click();
+        bodyEl.innerHTML = "";
+
+        const wrap = document.createElement("div");
+        wrap.className = "msg-edit-wrap";
+
+        const ta = document.createElement("textarea");
+        ta.className = "msg-edit-textarea terminal-scroll";
+        ta.value = msg.text;
+        ta.spellcheck = false;
+
+        const btns = document.createElement("div");
+        btns.className = "msg-edit-btns";
+
+        const saveBtn = document.createElement("button");
+        saveBtn.type = "button";
+        saveBtn.className = "btn-solid btn-xs";
+        saveBtn.textContent = "SAVE";
+        saveBtn.addEventListener("click", () => {
+            const updated = ta.value.trim();
+            if (updated) {
+                msg.text = updated;
+                saveThreads();
+                sfx.click();
+            }
+            renderActiveThread();
+        });
+
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.className = "btn-jrpg btn-xs";
+        cancelBtn.textContent = "CANCEL";
+        cancelBtn.addEventListener("click", () => {
+            sfx.click();
+            renderActiveThread();
+        });
+
+        btns.appendChild(cancelBtn);
+        btns.appendChild(saveBtn);
+        wrap.appendChild(ta);
+        wrap.appendChild(btns);
+        bodyEl.appendChild(wrap);
+        ta.focus();
+    }
+
+    function deleteMessageAt(msgIndex) {
+        if (state.isGenerating) return;
+        const thread = getThread(state.activeThreadId);
+        if (msgIndex < 0 || msgIndex >= thread.length) return;
+        sfx.click();
+        thread.splice(msgIndex, 1);
+        saveThreads();
+        renderActiveThread();
+        updateSecondOpinionBar();
+    }
+
+    function branchConversationAt(msgIndex = null) {
+        if (state.isGenerating) return;
+        const sourceThread = getThread(state.activeThreadId);
+        if (sourceThread.length === 0) return;
+
+        const sliceEnd = msgIndex === null ? sourceThread.length : msgIndex + 1;
+        const cloned = JSON.parse(JSON.stringify(sourceThread.slice(0, sliceEnd)));
+        const active = getActiveExpert();
+        const branchId = `branch_${Date.now()}`;
+        const customName = dom.saveSlotNameInput.value.trim();
+        const label = customName || `${getShortName(active.name)} B${state.savedChats.filter((s) => s.isBranch).length + 1}`;
+
+        cloned.push({
+            type: "system",
+            text:
+                msgIndex === null
+                    ? `BRANCHED CONVERSATION: ${label}`
+                    : `BRANCHED FROM MESSAGE #${sliceEnd}: ${label}`,
+            time: getFormattedTime()
+        });
+
+        state.threads[branchId] = cloned;
+        state.savedChats.unshift({
+            id: `save_${Date.now()}`,
+            name: label,
+            threadId: branchId,
+            expertId: active.id,
+            isBranch: true,
+            createdAt: new Date().toLocaleString(),
+            messages: JSON.parse(JSON.stringify(cloned))
+        });
+
+        state.activeThreadId = branchId;
+        state.activeBranchLabel = label;
+        dom.saveSlotNameInput.value = "";
+
+        saveThreads();
+        saveSavedChats();
+        syncExpertUI();
+        renderActiveThread();
+        renderSavesList();
+        sfx.switchUnit();
+    }
+
+    function saveCurrentConversation() {
+        const thread = getThread(state.activeThreadId);
+        if (thread.length === 0) return;
+        const active = getActiveExpert();
+        const customName = dom.saveSlotNameInput.value.trim();
+        const stamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const label = customName || `${getShortName(active.name)} ${stamp}`;
+
+        state.savedChats.unshift({
+            id: `save_${Date.now()}`,
+            name: label,
+            threadId: state.activeThreadId,
+            expertId: active.id,
+            isBranch: Boolean(state.activeBranchLabel),
+            createdAt: new Date().toLocaleString(),
+            messages: JSON.parse(JSON.stringify(thread))
+        });
+
+        dom.saveSlotNameInput.value = "";
+        saveSavedChats();
+        renderSavesList();
+        sfx.transmit();
+    }
+
+    function loadSavedConversation(saveId) {
+        if (state.isGenerating) return;
+        const entry = state.savedChats.find((s) => s.id === saveId);
+        if (!entry) return;
+
+        const targetExpert = getExpertById(entry.expertId) || state.experts[0];
+        state.selectedId = targetExpert.id;
+
+        if (entry.isBranch && entry.threadId) {
+            state.activeThreadId = entry.threadId;
+            state.activeBranchLabel = entry.name;
+            if (!state.threads[entry.threadId] || state.threads[entry.threadId].length === 0) {
+                state.threads[entry.threadId] = JSON.parse(JSON.stringify(entry.messages || []));
+            }
+        } else {
+            const loadedThreadId = `loaded_${entry.id}`;
+            state.threads[loadedThreadId] = JSON.parse(JSON.stringify(entry.messages || []));
+            state.activeThreadId = loadedThreadId;
+            state.activeBranchLabel = entry.name;
+        }
+
+        saveThreads();
+        savePrefs();
+        setInstructionsOpen(false);
+        syncExpertUI();
+        renderActiveThread();
+        renderSavesList();
+        dom.savesDrawer.classList.add("hidden");
+        sfx.switchUnit();
+    }
+
+    function deleteSavedConversation(saveId) {
+        const idx = state.savedChats.findIndex((s) => s.id === saveId);
+        if (idx === -1) return;
+        state.savedChats.splice(idx, 1);
+        saveSavedChats();
+        renderSavesList();
+        sfx.click();
+    }
+
+    function exportCurrentConversation() {
+        const thread = getThread(state.activeThreadId);
+        const active = getActiveExpert();
+        const title = state.activeBranchLabel || active.name;
+        const lines = [`# ${title}`, `Exported: ${new Date().toLocaleString()}`, ""];
+
+        thread.forEach((m) => {
+            if (m.type === "system") {
+                lines.push(`> *${m.text}* [${m.time || ""}]`, "");
+            } else if (m.type === "user") {
+                lines.push(`### YOU [${m.time || ""}]`, m.text, "");
+            } else {
+                lines.push(`### ${m.expertName || active.name} (${m.expertTitle || active.title}) [${m.time || ""}]`, m.text, "");
+            }
+        });
+
+        const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.md`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        sfx.click();
+    }
+
+    function renderSavesList() {
+        dom.savesList.innerHTML = "";
+        if (state.savedChats.length === 0) {
+            dom.savesList.innerHTML = `<div class="saves-empty">NO SAVED CONVERSATIONS OR BRANCHES YET.</div>`;
+            return;
+        }
+
+        state.savedChats.forEach((entry) => {
+            const row = document.createElement("div");
+            const isCurrent = entry.threadId === state.activeThreadId && state.activeBranchLabel === entry.name;
+            row.className = `save-item ${isCurrent ? "active-save" : ""}`;
+
+            const meta = document.createElement("div");
+            meta.className = "save-item-meta";
+            const msgCount = (entry.messages || []).filter((m) => m.type !== "system").length;
+            meta.innerHTML = `
+                <div class="save-item-title">${entry.isBranch ? '<span class="save-tag-branch">[BRANCH]</span>' : ""}${escapeHTML(entry.name)}</div>
+                <div class="save-item-sub">${msgCount} MSGS // ${escapeHTML(entry.createdAt || "")}</div>
+            `;
+
+            const acts = document.createElement("div");
+            acts.className = "save-item-actions";
+
+            const loadBtn = document.createElement("button");
+            loadBtn.type = "button";
+            loadBtn.className = "btn-mini";
+            loadBtn.textContent = "LOAD";
+            loadBtn.addEventListener("click", () => loadSavedConversation(entry.id));
+
+            const delBtn = document.createElement("button");
+            delBtn.type = "button";
+            delBtn.className = "btn-mini text-danger";
+            delBtn.textContent = "DEL";
+            delBtn.addEventListener("click", () => deleteSavedConversation(entry.id));
+
+            acts.appendChild(loadBtn);
+            acts.appendChild(delBtn);
+
+            row.appendChild(meta);
+            row.appendChild(acts);
+            dom.savesList.appendChild(row);
+        });
+    }
+
+    function createMessageElement(msg, msgIndex = null) {
         if (msg.type === "system") {
             const el = document.createElement("div");
             el.className = "sys-banner";
@@ -791,13 +1207,33 @@
         if (msg.type === "user") {
             const el = document.createElement("div");
             el.className = "msg-user";
-            el.innerHTML = `
-                <div class="msg-header">
-                    <span class="msg-speaker-name">▶ YOU</span>
-                    <span class="msg-time">[${escapeHTML(msg.time || "")}]</span>
-                </div>
-                <div class="msg-body">${formatMessageHTML(msg.text)}</div>
-            `;
+            if (msgIndex !== null) el.dataset.msgIndex = String(msgIndex);
+
+            const header = document.createElement("div");
+            header.className = "msg-header";
+
+            const speaker = document.createElement("span");
+            speaker.className = "msg-speaker-name";
+            speaker.textContent = "▶ YOU";
+
+            const right = document.createElement("div");
+            right.className = "msg-header-right";
+            if (msgIndex !== null) right.appendChild(buildMsgActionsEl(msgIndex));
+
+            const timeEl = document.createElement("span");
+            timeEl.className = "msg-time";
+            timeEl.textContent = `[${msg.time || ""}]`;
+            right.appendChild(timeEl);
+
+            header.appendChild(speaker);
+            header.appendChild(right);
+
+            const body = document.createElement("div");
+            body.className = "msg-body";
+            body.innerHTML = formatMessageHTML(msg.text);
+
+            el.appendChild(header);
+            el.appendChild(body);
             return el;
         }
 
@@ -808,6 +1244,7 @@
 
         const el = document.createElement("div");
         el.className = "msg-bot";
+        if (msgIndex !== null) el.dataset.msgIndex = String(msgIndex);
 
         const header = document.createElement("div");
         header.className = "msg-header";
@@ -835,12 +1272,17 @@
         left.appendChild(badge);
         left.appendChild(labelWrap);
 
+        const right = document.createElement("div");
+        right.className = "msg-header-right";
+        if (msgIndex !== null) right.appendChild(buildMsgActionsEl(msgIndex));
+
         const timeEl = document.createElement("span");
         timeEl.className = "msg-time";
         timeEl.textContent = `[${msg.time || ""}]`;
+        right.appendChild(timeEl);
 
         header.appendChild(left);
-        header.appendChild(timeEl);
+        header.appendChild(right);
 
         const body = document.createElement("div");
         body.className = "msg-body";
@@ -854,8 +1296,8 @@
     function renderActiveThread() {
         dom.chatFeed.innerHTML = "";
         const thread = getThread(state.activeThreadId);
-        thread.forEach((msg) => {
-            dom.chatFeed.appendChild(createMessageElement(msg));
+        thread.forEach((msg, idx) => {
+            dom.chatFeed.appendChild(createMessageElement(msg, idx));
         });
         scrollToBottom();
     }
@@ -897,6 +1339,7 @@
         const thread = getThread(threadId);
         const systemContent = [
             activeExpert.systemPrompt,
+            NO_EMOJI_HARD_RULE,
             state.secondOpinionMode
                 ? `You are currently participating in a multi-expert conversation as ${activeExpert.name} (${activeExpert.title}). Previous replies in the thread may come from other experts—offer your own distinct perspective from your area of expertise.`
                 : ""
@@ -1058,19 +1501,20 @@
 
             botMsgObj.text = fullReply || "(Empty response)";
             pushThreadMessage(threadId, botMsgObj);
+            renderActiveThread();
             setApiStatus("ONLINE", "ok");
             showApiFeedback(`OK // ${model}`);
         } catch (err) {
             if (err.name === "AbortError") {
                 botMsgObj.text = fullReply ? `${fullReply}\n\n[TRANSMISSION HALTED]` : "[TRANSMISSION HALTED]";
-                bodyEl.innerHTML = formatMessageHTML(botMsgObj.text);
                 pushThreadMessage(threadId, botMsgObj);
+                renderActiveThread();
                 setApiStatus("STOPPED", "busy");
             } else {
                 const errMsg = `[API ERROR] ${err.message}\nCheck Base URL, Model ID, API Key, or local CORS settings (e.g. enable CORS in LM Studio).`;
                 botMsgObj.text = errMsg;
-                bodyEl.innerHTML = formatMessageHTML(errMsg);
                 pushThreadMessage(threadId, botMsgObj);
+                renderActiveThread();
                 setApiStatus("ERROR", "error");
                 showApiFeedback(err.message.slice(0, 48), true);
             }
@@ -1223,6 +1667,7 @@
             if (!state.secondOpinionMode) {
                 // Returning to 1-on-1 mode switches back to the active expert's own thread
                 state.activeThreadId = state.selectedId;
+                state.activeBranchLabel = null;
                 ensureThreadGreeting(state.activeThreadId);
                 renderActiveThread();
             } else {
@@ -1239,6 +1684,28 @@
         dom.askSecondOpinionBtn.addEventListener("click", () => {
             sendChatCompletion({ isSecondOpinionAuto: true });
         });
+
+        // Saves & Branches Drawer
+        dom.openSavesBtn.addEventListener("click", () => {
+            sfx.click();
+            dom.savesDrawer.classList.toggle("hidden");
+            if (!dom.savesDrawer.classList.contains("hidden")) {
+                renderSavesList();
+            }
+        });
+
+        dom.closeSavesBtn.addEventListener("click", () => {
+            sfx.click();
+            dom.savesDrawer.classList.add("hidden");
+        });
+
+        dom.saveChatBtn.addEventListener("click", saveCurrentConversation);
+        dom.branchCurrentBtn.addEventListener("click", () => branchConversationAt(null));
+        dom.exportChatBtn.addEventListener("click", exportCurrentConversation);
+
+        // Add / Delete Expert
+        dom.addExpertBtn.addEventListener("click", addCustomExpert);
+        dom.deleteExpertBtn.addEventListener("click", deleteActiveExpert);
 
         // SFX Toggle
         dom.toggleSfxBtn.addEventListener("click", () => {
@@ -1278,7 +1745,7 @@
             rebuildAllSprites();
         });
 
-        // Custom single sprite upload for active expert
+        // Custom single sprite upload for active expert (persisted as compact data URL)
         dom.customSpriteInput.addEventListener("change", (e) => {
             const file = e.target.files?.[0];
             if (!file) return;
@@ -1287,7 +1754,19 @@
                 const img = new Image();
                 img.onload = () => {
                     const exp = getActiveExpert();
+                    // Downscale huge uploads slightly so localStorage stays lightweight
+                    const maxDim = 256;
+                    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+                    const c = document.createElement("canvas");
+                    c.width = Math.max(1, Math.round(img.width * scale));
+                    c.height = Math.max(1, Math.round(img.height * scale));
+                    const cCtx = c.getContext("2d");
+                    cCtx.imageSmoothingEnabled = false;
+                    cCtx.drawImage(img, 0, 0, c.width, c.height);
+
+                    exp.customSpriteDataUrl = c.toDataURL("image/png");
                     state.customSpriteImages[exp.id] = img;
+                    saveExpertOverrides();
                     rebuildExpertSprite(exp);
                     refreshRosterThumbnails();
                     refreshChatBadges();
@@ -1303,6 +1782,8 @@
         dom.resetSpriteBtn.addEventListener("click", () => {
             const exp = getActiveExpert();
             delete state.customSpriteImages[exp.id];
+            delete exp.customSpriteDataUrl;
+            saveExpertOverrides();
             rebuildExpertSprite(exp);
             refreshRosterThumbnails();
             refreshChatBadges();
@@ -1389,10 +1870,15 @@
         dom.resetExpertBtn.addEventListener("click", () => {
             const exp = getActiveExpert();
             const def = window.DEFAULT_EXPERTS.find((d) => d.id === exp.id);
-            if (!def) return;
-            exp.name = def.name;
-            exp.title = def.title;
-            exp.systemPrompt = def.systemPrompt;
+            if (def) {
+                exp.name = def.name;
+                exp.title = def.title;
+                exp.systemPrompt = def.systemPrompt;
+            } else {
+                exp.name = `EXPERT ${exp.slot}`;
+                exp.title = "SPECIALIST";
+                exp.systemPrompt = "You are a helpful, knowledgeable specialist. Give clear, concise, practical answers tailored to the user's needs.";
+            }
             saveExpertOverrides();
             syncExpertUI();
             sfx.click();

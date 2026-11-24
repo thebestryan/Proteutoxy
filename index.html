@@ -137,10 +137,42 @@
                             class="btn-jrpg btn-xs"
                             title="When ON, switching experts keeps you in this same thread so another expert can weigh in"
                         >2ND OPINION: OFF</button>
+                        <button
+                            id="open-saves-btn"
+                            type="button"
+                            class="btn-jrpg btn-xs"
+                            title="Save, load, export, or switch conversation branches"
+                        >SAVES</button>
                         <button id="toggle-sfx-btn" type="button" class="btn-jrpg btn-xs">SFX: ON</button>
                         <button id="clear-log-btn" type="button" class="btn-jrpg btn-xs text-danger">CLEAR</button>
                     </div>
                 </header>
+
+                <!-- JRPG Save Slots & Branches Drawer (inside Chat Window) -->
+                <div id="saves-drawer" class="saves-drawer hidden">
+                    <div class="saves-drawer-header">
+                        <span class="text-highlight">▶ SAVE SLOTS &amp; BRANCHES</span>
+                        <button id="close-saves-btn" type="button" class="btn-mini">[X] CLOSE</button>
+                    </div>
+
+                    <div class="saves-create-row">
+                        <input
+                            id="save-slot-name-input"
+                            type="text"
+                            class="jrpg-input"
+                            placeholder="Save name (optional)..."
+                            maxlength="48"
+                            spellcheck="false"
+                        >
+                        <button id="save-chat-btn" type="button" class="btn-solid btn-xs">SAVE</button>
+                        <button id="branch-current-btn" type="button" class="btn-solid btn-xs">BRANCH</button>
+                        <button id="export-chat-btn" type="button" class="btn-mini" title="Download current chat as Markdown">EXPORT</button>
+                    </div>
+
+                    <div id="saves-list" class="saves-list terminal-scroll">
+                        <!-- Dynamic saved chats & branches -->
+                    </div>
+                </div>
 
                 <!-- Chat Messages Feed -->
                 <div id="chat-feed" class="chat-feed terminal-scroll" aria-live="polite">
@@ -185,7 +217,10 @@
             <section class="jrpg-panel panel-roster">
                 <div class="panel-header">
                     <span class="text-highlight">▶ CHOOSE EXPERT</span>
-                    <span id="roster-mode-badge" class="mode-pill">9 UNITS</span>
+                    <div class="roster-header-actions">
+                        <span id="roster-mode-badge" class="mode-pill">9 UNITS</span>
+                        <button id="add-expert-btn" type="button" class="btn-mini" title="Add a new custom expert">+ ADD</button>
+                    </div>
                 </div>
                 <div id="roster-mode-hint" class="roster-hint hidden">
                     2ND OPINION ON: PICK AN EXPERT TO JOIN THIS THREAD
@@ -240,7 +275,8 @@
                         <span id="instructions-feedback" class="feedback-inline">AUTO-SAVED</span>
                         <div class="instructions-btn-row">
                             <button id="save-expert-btn" type="button" class="btn-solid btn-xs">SAVE</button>
-                            <button id="reset-expert-btn" type="button" class="btn-jrpg btn-xs text-danger">DEFAULT</button>
+                            <button id="reset-expert-btn" type="button" class="btn-jrpg btn-xs text-cyan">DEFAULT</button>
+                            <button id="delete-expert-btn" type="button" class="btn-jrpg btn-xs text-danger">DEL</button>
                         </div>
                     </div>
                 </div>
